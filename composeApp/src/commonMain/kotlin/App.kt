@@ -19,9 +19,11 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +36,10 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
 
@@ -49,8 +55,13 @@ fun convertMoney(money: Int): String {
 fun App() {
     MaterialTheme {
 
-        val dices by remember {
-            mutableStateOf(arrayOf(GambleType.NONE, GambleType.NONE, GambleType.NONE))
+        val coroutineScope = rememberCoroutineScope()
+
+        val dices = remember {
+            mutableStateListOf(GambleType.NONE, GambleType.NONE, GambleType.NONE)
+        }
+        val lastDices = remember {
+            mutableStateListOf(GambleType.NONE, GambleType.NONE, GambleType.NONE)
         }
 
         var money by remember {
@@ -58,7 +69,7 @@ fun App() {
         }
 
         var currentMoneySelected by remember {
-            mutableStateOf(0)
+            mutableStateOf(VND_50_000)
         }
         val betValue = remember {
             mutableStateMapOf<GambleType, Int>()
@@ -69,7 +80,7 @@ fun App() {
         }
 
         val handleBet: (amount: Int, gambleType: GambleType) -> Unit = { amount, gambleType ->
-            if (amount <= money) {
+            if (amount in 1..money && gamestate == GameState.BETTING) {
                 money -= amount
                 if (gambleType !in betValue) {
                     betValue[gambleType] = 0
@@ -77,6 +88,11 @@ fun App() {
                 betValue[gambleType] = betValue[gambleType]?.plus(amount) ?: 0
             }
         }
+
+        var lastWin by remember {
+            mutableStateOf(0)
+        }
+
         val handleRevertBet: (gambleType: GambleType) -> Unit = { gambleType ->
             if ((betValue[gambleType] ?: 0) > 0) {
                 val amount = betValue[gambleType] ?: 0
@@ -92,7 +108,8 @@ fun App() {
         ) {
             Text(
                 "Vốn: ${convertMoney(money)}",
-                modifier = Modifier.wrapContentSize().shadow(Color.Yellow, 16.dp, 32.dp).padding(vertical = 0.dp, horizontal = 36.dp),
+                modifier = Modifier.wrapContentSize().shadow(Color.Yellow, 16.dp, 32.dp)
+                    .padding(vertical = 0.dp, horizontal = 36.dp),
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Black, color = Color.Red
             )
@@ -188,7 +205,10 @@ fun App() {
                 }
             }
 
-            LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.fillMaxWidth().padding(4.dp)) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier.fillMaxWidth().padding(4.dp)
+            ) {
                 item {
                     GambleCell(betValue[GambleType.BAU] ?: 0, GambleType.BAU) {
                         handleBet(currentMoneySelected, GambleType.BAU)
@@ -200,22 +220,22 @@ fun App() {
                     }
                 }
                 item {
-                    GambleCell(betValue[GambleType.TOM] ?: 0,GambleType.TOM) {
+                    GambleCell(betValue[GambleType.TOM] ?: 0, GambleType.TOM) {
                         handleBet(currentMoneySelected, GambleType.TOM)
                     }
                 }
                 item {
-                    GambleCell(betValue[GambleType.CA] ?: 0,GambleType.CA) {
+                    GambleCell(betValue[GambleType.CA] ?: 0, GambleType.CA) {
                         handleBet(currentMoneySelected, GambleType.CA)
                     }
                 }
                 item {
-                    GambleCell(betValue[GambleType.GA] ?: 0,GambleType.GA) {
+                    GambleCell(betValue[GambleType.GA] ?: 0, GambleType.GA) {
                         handleBet(currentMoneySelected, GambleType.GA)
                     }
                 }
                 item {
-                    GambleCell(betValue[GambleType.NAI] ?: 0,GambleType.NAI) {
+                    GambleCell(betValue[GambleType.NAI] ?: 0, GambleType.NAI) {
                         handleBet(currentMoneySelected, GambleType.NAI)
                     }
                 }
@@ -231,20 +251,87 @@ fun App() {
                 MiniGambleCell(dices[2])
             }
 
+            Text("Lượt trước: ${lastDices[0]} - ${lastDices[1]} - ${lastDices[2]}")
+
             Box(
                 modifier = Modifier.fillMaxWidth().height(100.dp).padding(8.dp)
                     .shadow(Color.Red, 16.dp, 8.dp)
                     .background(Color.Red, RoundedCornerShape(16.dp))
                     .clip(RoundedCornerShape(16.dp))
                     .clickable {
+                        if (gamestate == GameState.ENDED) {
+                            gamestate = GameState.BETTING
+                        } else if (gamestate == GameState.BETTING && betValue.isNotEmpty()) {
+                            coroutineScope.launch {
+                                gamestate = GameState.ROLLING
+                                var dur = 0
+                                while (true) {
+                                    dices[0] = GambleType.entries.toTypedArray().random()
+                                    dices[1] = GambleType.entries.toTypedArray().random()
+                                    dices[2] = GambleType.entries.toTypedArray().random()
+                                    if (dur > 3000) {
+                                        break
+                                    }
+                                    delay(100)
+                                    dur += 100
+                                }
+                                gamestate = GameState.ENDED
 
+                                val result = hashMapOf<GambleType, Int>()
+                                dices.forEach {
+                                    if (it !in result) {
+                                        result[it] = 0
+                                    }
+                                    result[it] = result[it]?.plus(1) ?: 0
+                                }
+
+                                lastDices.clear()
+                                lastDices.addAll(dices)
+
+                                println(result)
+                                println(betValue.toMap())
+                                println("money before: $money")
+
+                                var winValue = 0
+                                betValue.forEach { (gambleType, amount) ->
+                                    if ((result[gambleType] ?: 0) > 0) {
+                                        winValue += amount * ((result[gambleType] ?: 0) + 1)
+                                    }
+                                }
+                                money += winValue
+                                lastWin = winValue
+                                println("money after: $money")
+
+                                betValue.clear()
+                                currentMoneySelected = 0
+
+                                delay(200)
+                                gamestate = GameState.BETTING
+                            }
+                        }
                     }
             ) {
                 Text(
-                    "Xóc!", modifier = Modifier.wrapContentSize().align(Alignment.Center),
-                    fontSize = 32.sp, fontWeight = FontWeight.Black, color = Color.Yellow
+                    if (betValue.toMap().values.sum() > 0) "Xóc!" else "Cược thêm!!!",
+                    modifier = Modifier.wrapContentSize().align(Alignment.Center),
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.Yellow
                 )
             }
+
+            Text(
+                if (money == 0) "Cháy CMNR!!! CÒN CÁI NỊT!"
+                else if (lastWin > 0) "Ăn được: ${convertMoney(lastWin)}" else "Trời độ không bằng trình độ!!!",
+                modifier = Modifier.wrapContentSize(), fontSize = 24.sp, color = Color.Red, fontWeight = FontWeight.Normal
+            )
+
+            Text("Trạng thái: $gamestate", modifier = Modifier.wrapContentSize())
+            Text(
+                "Tổng cược: ${convertMoney(betValue.toMap().values.sum())}",
+                modifier = Modifier.wrapContentSize()
+            )
+
         }
     }
 }
@@ -287,7 +374,7 @@ fun GambleCell(betAmount: Int, gambleType: GambleType, onBet: () -> Unit = {}) {
             Text(
                 convertMoney(betAmount),
                 modifier = Modifier,
-                color = Color.Yellow, fontSize = 18.sp, fontWeight = FontWeight.Bold
+                color = Color.Red, fontSize = 20.sp, fontWeight = FontWeight.Bold
             )
         }
     }
