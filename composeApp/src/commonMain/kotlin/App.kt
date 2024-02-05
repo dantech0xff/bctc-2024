@@ -19,6 +19,7 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -48,7 +49,7 @@ fun convertMoney(money: Int): String {
 fun App() {
     MaterialTheme {
 
-        var dices by remember {
+        val dices by remember {
             mutableStateOf(arrayOf(GambleType.NONE, GambleType.NONE, GambleType.NONE))
         }
 
@@ -59,21 +60,47 @@ fun App() {
         var currentMoneySelected by remember {
             mutableStateOf(0)
         }
+        val betValue = remember {
+            mutableStateMapOf<GambleType, Int>()
+        }
+
+        var gamestate by remember {
+            mutableStateOf(GameState.BETTING)
+        }
+
+        val handleBet: (amount: Int, gambleType: GambleType) -> Unit = { amount, gambleType ->
+            if (amount <= money) {
+                money -= amount
+                if (gambleType !in betValue) {
+                    betValue[gambleType] = 0
+                }
+                betValue[gambleType] = betValue[gambleType]?.plus(amount) ?: 0
+            }
+        }
+        val handleRevertBet: (gambleType: GambleType) -> Unit = { gambleType ->
+            if ((betValue[gambleType] ?: 0) > 0) {
+                val amount = betValue[gambleType] ?: 0
+                money += amount
+                betValue[gambleType] = 0
+            }
+        }
 
         Column(
             Modifier.fillMaxWidth().safeDrawingPadding(),
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
                 "Vốn: ${convertMoney(money)}",
-                modifier = Modifier.wrapContentSize().padding(12.dp),
+                modifier = Modifier.wrapContentSize().shadow(Color.Yellow, 16.dp, 32.dp).padding(vertical = 0.dp, horizontal = 36.dp),
                 fontSize = 24.sp,
-                fontWeight = FontWeight.Normal
+                fontWeight = FontWeight.Black, color = Color.Red
             )
 
             Row(
                 modifier = Modifier.padding(horizontal = 8.dp).fillMaxWidth()
-                    .background(Color.LightGray.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
+                    .shadow(Color.Red.copy(alpha = 0.2f), 16.dp, 6.dp)
+                    .background(Color.White, RoundedCornerShape(16.dp))
                     .padding(vertical = 8.dp),
                 horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
@@ -154,49 +181,49 @@ fun App() {
                     Text(
                         "+",
                         modifier = Modifier.align(Alignment.Center),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = TextUnit(18f, TextUnitType.Sp),
+                        fontWeight = FontWeight.Black,
+                        fontSize = TextUnit(24f, TextUnitType.Sp),
                         color = Color.Yellow
                     )
                 }
             }
 
-            LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.fillMaxWidth()) {
+            LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.fillMaxWidth().padding(4.dp)) {
                 item {
-                    GambleCell(GambleType.BAU) {
-
+                    GambleCell(betValue[GambleType.BAU] ?: 0, GambleType.BAU) {
+                        handleBet(currentMoneySelected, GambleType.BAU)
                     }
                 }
                 item {
-                    GambleCell(GambleType.CUA) {
-
+                    GambleCell(betValue[GambleType.CUA] ?: 0, GambleType.CUA) {
+                        handleBet(currentMoneySelected, GambleType.CUA)
                     }
                 }
                 item {
-                    GambleCell(GambleType.TOM) {
-
+                    GambleCell(betValue[GambleType.TOM] ?: 0,GambleType.TOM) {
+                        handleBet(currentMoneySelected, GambleType.TOM)
                     }
                 }
                 item {
-                    GambleCell(GambleType.CA) {
-
+                    GambleCell(betValue[GambleType.CA] ?: 0,GambleType.CA) {
+                        handleBet(currentMoneySelected, GambleType.CA)
                     }
                 }
                 item {
-                    GambleCell(GambleType.GA) {
-
+                    GambleCell(betValue[GambleType.GA] ?: 0,GambleType.GA) {
+                        handleBet(currentMoneySelected, GambleType.GA)
                     }
                 }
                 item {
-                    GambleCell(GambleType.NAI) {
-
+                    GambleCell(betValue[GambleType.NAI] ?: 0,GambleType.NAI) {
+                        handleBet(currentMoneySelected, GambleType.NAI)
                     }
                 }
             }
 
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 MiniGambleCell(dices[0])
@@ -205,8 +232,9 @@ fun App() {
             }
 
             Box(
-                modifier = Modifier.fillMaxWidth().height(100.dp).padding(4.dp)
-                    .background(Color.LightGray.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                modifier = Modifier.fillMaxWidth().height(100.dp).padding(8.dp)
+                    .shadow(Color.Red, 16.dp, 8.dp)
+                    .background(Color.Red, RoundedCornerShape(16.dp))
                     .clip(RoundedCornerShape(16.dp))
                     .clickable {
 
@@ -214,7 +242,7 @@ fun App() {
             ) {
                 Text(
                     "Xóc!", modifier = Modifier.wrapContentSize().align(Alignment.Center),
-                    fontSize = 32.sp, fontWeight = FontWeight.Black
+                    fontSize = 32.sp, fontWeight = FontWeight.Black, color = Color.Yellow
                 )
             }
         }
@@ -223,34 +251,45 @@ fun App() {
 
 @OptIn(ExperimentalResourceApi::class)
 @Composable
-fun GambleCell(gambleType: GambleType, onClick: () -> Unit = {}) {
-    Box(
-        modifier = Modifier
-    ) {
-        Image(
-            painter = painterResource(
-                when (gambleType) {
-                    GambleType.BAU -> "bau.png"
-                    GambleType.CUA -> "cua.png"
-                    GambleType.TOM -> "tom.png"
-                    GambleType.CA -> "ca.png"
-                    GambleType.GA -> "ga.png"
-                    GambleType.NAI -> "nai.png"
-                    else -> "none.jpeg"
-                }
-            ),
-            contentDescription = "Compose Logo",
-            modifier = Modifier.align(Alignment.Center)
-                .size(120.dp)
-                .background(
-                Color.LightGray.copy(alpha = 0.5f),
-                RoundedCornerShape(16.dp)
-            ).clip(RoundedCornerShape(16.dp))
-                .clickable {
-                    onClick()
-                },
-            contentScale = ContentScale.Crop
-        )
+fun GambleCell(betAmount: Int, gambleType: GambleType, onBet: () -> Unit = {}) {
+    Box(modifier = Modifier.padding(8.dp)) {
+        Column (modifier = Modifier
+            .shadow(Color.Red.copy(alpha = 0.2f), borderRadius = 12.dp, blurRadius = 6.dp)
+            .background(Color.White, RoundedCornerShape(12.dp)),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(0.dp)
+        ) {
+            Image(
+                painter = painterResource(
+                    when (gambleType) {
+                        GambleType.BAU -> "bau.png"
+                        GambleType.CUA -> "cua.png"
+                        GambleType.TOM -> "tom.png"
+                        GambleType.CA -> "ca.png"
+                        GambleType.GA -> "ga.png"
+                        GambleType.NAI -> "nai.png"
+                        else -> "none.jpeg"
+                    }
+                ),
+                contentDescription = "Compose Logo",
+                modifier = Modifier
+                    .padding(2.dp)
+                    .size(120.dp)
+                    .background(
+                        Color.LightGray.copy(alpha = 0.5f),
+                        RoundedCornerShape(12.dp)
+                    ).clip(RoundedCornerShape(12.dp))
+                    .clickable {
+                        onBet()
+                    },
+                contentScale = ContentScale.Crop
+            )
+            Text(
+                convertMoney(betAmount),
+                modifier = Modifier,
+                color = Color.Yellow, fontSize = 18.sp, fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 
@@ -258,12 +297,9 @@ fun GambleCell(gambleType: GambleType, onClick: () -> Unit = {}) {
 @Composable
 fun MiniGambleCell(gambleType: GambleType) {
     Box(
-        modifier = Modifier.size(42.dp)
-            .background(
-                Color.LightGray.copy(alpha = 0.5f),
-                RoundedCornerShape(16.dp)
-            )
-            .clip(RoundedCornerShape(16.dp))
+        modifier = Modifier.size(89.dp)
+            .shadow(Color.Yellow.copy(alpha = 0.8f), borderRadius = 12.dp, blurRadius = 6.dp)
+            .background(Color.White, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp))
     ) {
         Image(
             painter = painterResource(
@@ -291,4 +327,10 @@ enum class GambleType(val value: Int) {
     CA(3),
     GA(4),
     NAI(5)
+}
+
+enum class GameState(val value: Int) {
+    BETTING(0),
+    ROLLING(1),
+    ENDED(2)
 }
